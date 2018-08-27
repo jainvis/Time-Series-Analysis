@@ -1,0 +1,1086 @@
+---
+title: "Analysis & Prediction of Egg Depositions of age-3 Lake Huron Bloaters (Coregonus hoyi)"
+author: "Vishesh Jain"
+subtitle: Time Series Analysis
+date: '`r format(Sys.time(), "%d %B, %Y")`'
+output:
+  pdf_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: no
+    toc_depth: 3
+linkcolor: blue
+documentclass: article
+---
+\newpage
+
+\tableofcontents
+
+\newpage
+
+# INTRODUCTION
+
+The objective of this report is to analyze the egg depositions of age-3 Lake Huron Bloasters from 1981 to 1996 and provide forecast next 5 years, using the best fit model.
+
+To find the best fit model, both trend models and ARIMA models are explored and diagnosed using various methods.
+
+After selecting the best model, depositions from 1997 to 2001 are predicted and visualised.
+
+# PACKAGES
+
+Following packages will be used for analysis and prediction.
+```{r results='hide', message=FALSE, warning=FALSE}
+library(TSA)
+library(dplyr)
+library(knitr)
+library(FSAdata)
+library(fUnitRoots)
+library(lmtest)
+library(AID)
+library(forecast)
+library(ggplot2)
+```
+
+# DATA
+
+Following information is given for the data:
+
+- The dataset gives Egg depositions (in millions) of age-3 Lake Huron Bloaters (Coregonus hoyi) between years 1981 and 1996
+- Column 'eggs' will be used as it represent the depositions
+- Currently the dataset is a dataframe and not a time series
+
+```{r}
+data("BloaterLH")
+class(BloaterLH)
+```
+```{r echo=FALSE}
+knitr::kable(BloaterLH[1:5,1:2], caption = "Sample Data")
+```
+
+\pagebreak
+
+## Data Transformation
+
+Function ts() from TSA() package will be used to convert the given data set into a time series.
+
+```{r}
+eggs <- BloaterLH[,2] #Using only eggs column
+eggs.ts <- ts(as.vector(eggs), start = 1981)
+```
+Checking the class of our data set, it shows that it has been successfully converted into a time-series data.
+
+## Data Exploration
+
+Here we will use visualisation and statistical methods to explore our time-series
+
+### Series Visualisation
+
+```{r}
+plot((eggs.ts), type = "o", ylab = 'Deposition (In Millions)', xlab = 'Years', 
+     main = 'Figure 1: Egg Depostions of age-3 Lake Huron Bloaters \n from 1981 to 1996', 
+     col = 'darkgreen', pch = 20, lwd=2)
+grid()
+```
+
+As per Fig. 1, There was a peak in deposition in 1990 but overall there is an upward trend.
+
+- **Trend** : There is clearly an updward trend
+- **Stationarity** : As there is a trend, the series is non-stationary
+- **Seasonality** : Seasonality cannot be seen in the series
+- **Behavior** : Auto - Regressive behavior
+- **Variance** : Change in Variance
+- **Pattern** : No repeating pattern can be seen
+
+### Relation Between Succeeding Points
+
+```{r}
+plot(y = eggs.ts, x = zlag(eggs.ts),
+     main = 'Figure 2: Scatter Plot of Egg Depositions in Succeeding Years',
+     ylab = 'Depositions (In Millions)', xlab = 'Previous Year Depositions (In Millions)',
+     col = 'darkgreen', pch = 16)
+grid()
+```
+
+Checking the relation between depositions in succeeding years in Fig. 2:
+
+- An upward trend is observed
+- Lower changes are followed by lower changes in next year and higher changes are followed by higher changes
+- *Positive correlation* can be seen
+
+The degree of correlation can be calculated using:
+
+```{r}
+y = eggs.ts
+x = zlag(eggs.ts) #Previous Year change with Lag = 1
+index = 2:length(x)
+cor(y[index],x[index])
+```
+As expected, there is a **fairly high positive correlation (0.74)** between ozone layer change in succeeding years. We can say that there is a auto-regressive behavior in the time series.
+
+## Handling Change in Variance
+
+We will use log-transformation to decrease the change in variance.
+
+```{r}
+
+t.eggs = log(eggs.ts)
+
+plot((t.eggs), type = "o", ylab = 'Log Transformed Depositions (Millions)', xlab = 'Years', 
+     main = 'Figure 3: Egg Depostions of age-3 Lake Huron Bloaters \n from 1981 to 1996', 
+     col = 'darkgreen', pch = 20, lwd=2)
+grid()
+```
+
+As per Fig. 3, the variance is more stabilised as compared to original series. We will use this tranformed data while using trend models.
+
+## Normality Of the Series
+
+We will explore the distribution of the series through Q-Q plot and hypthesis test of normality.
+
+```{r}
+qqnorm(t.eggs, col="blue", main = "Figure 4: Normal Q-Q Plot of the Transformed Data")
+qqline(t.eggs, col=2)
+grid()
+
+# Hypothesis Test of Normality
+
+shapiro.test(t.eggs)
+
+
+```
+
+- As per Fig. 4, we can observe departure of points from the normality line (red), this shows that the series is not normally distributed
+- The p-value in shapiro-wilk test is greater than 0.5 (Significance Level). Therefore, the series is normal by the hypothesis test
+-  [Because of a small sample size, normality tests have little power to reject the null hypothesis that the data come from a normal distribution. Therefore, small samples always pass normality tests.](http://journals.tubitak.gov.tr/medical/issues/sag-06-36-3/sag-36-3-7-0510-10.pdf)
+
+\pagebreak
+
+# TREND MODELING
+
+## Linear Trend Model
+
+The series is treated as a linear time trend and the slope & intercept are calculated using least squares regression approach.
+
+```{r}
+t <- time(t.eggs)
+model1 = lm(t.eggs ~ t) #Linear Model with one time coefficient
+summary(model1)
+```
+**Regression Output:**
+
+1. **Coefficients**:
+    + *Slope*: 0.084, statistically significant
+    + *Intercept*: -165.98, statistically significant
+2. **Adjusted R-square** = 0.40, the linear trend regression model is able to only explain **63%** of   the variance.
+3. **Residual Standard Error** : The actual change in the depositions can deviate from the regression line by 0.4598
+4. **F_statistic**: It shows that there is a relationship between time and depositions
+
+### Plotting the Linear Trend Line
+
+```{r}
+plot(t.eggs, type = 'o', ylab = 'Depositions (In Millions)', xlab = 'Years', 
+     main = 'Figure 5: Fitted Linear Trend to the Egg Depositon Data', 
+     pch = 19, col = 'darkgreen', lw = 1.8)
+abline(model1, col = 'gold') #Adding the trend line
+grid()
+```
+
+As per fig. 5,
+- Distance between line and points is at optimal level. It captures the trend but it doesnt capture auto correlation of succeeding points. 
+- The regression line is also not able to capture change in variance.
+
+\pagebreak 
+
+## Quadratic Trend Model
+
+Now, fitting a quadratic trend model to the data.
+
+```{r}
+t <- time(t.eggs)   #Firt variable
+t2 <- t^2             #t-square as the second variable
+model2 = lm(t.eggs ~  t + t2)
+summary(model2)
+```
+
+**Regression Output:**
+
+1. **Coefficients**:
+    + *Intercept* : -4.647e+04, statistically significant
+    + *$t$*: 4.665e+01, statistically significant
+    + *$t^2$*: -1.171e-02, statistically significant
+2. **Adjusted R-square** = 0.73, the linear trend regression model is able to explain **89%** of the variance.
+3. **Residual Standard Error** : The actual change in the depositions can deviate from the regression line by 0.4092
+4. **F_statistic**: It shows that there is a relationship between time and change in ozone layer thickness
+
+### Plotting the Quadratic Trend Line
+
+```{r}
+plot(ts(fitted(model2), frequency = 1, start = c(1981,1)), ylim = 
+       c(min(c(fitted(model2),as.vector(t.eggs))), 
+         max(c(fitted(model2),as.vector(t.eggs)))),
+     ylab='Log Transformed Depositions (In Millions)' , 
+     main = "Figure 6: Fitted quadratic curve to Egg Depositions Data", col = 'gold')
+lines(t.eggs,type="o", col = 'darkgreen', pch = 19, lw = 1.8)
+grid()
+```
+
+As per fig. 6,
+- Distance between line and points is at optimal level. It captures the trend better than the linear trend model.
+
+## Harmonic Trend
+
+As there was *no cyclic trend* or *seasonality* in the series, harmonic model will not be used.
+
+\pagebreak
+
+## Diagnostic Checking
+
+### Time-Series Plot of Residuals
+
+```{r fig.height=4}
+par(mfrow = c(1,2))
+
+plot(y=rstudent(model1),x=as.vector(time(t.eggs)), xlab="Time",
+     ylab="Standardized Residuals",type='o', 
+     main = "Figure 7: Linear Model", 
+     col = 'darkblue', pch = 20, lwd = 2)
+abline(h=0, col = 'red')
+grid()
+
+plot(y=rstudent(model2),x=as.vector(time(t.eggs)), xlab="Time",
+     ylab="Standardized Residuals",type='o', 
+     main = "Figure 8: Quadratic Model", 
+     col = 'darkblue', pch = 20, lwd = 2)
+abline(h=0, col = 'red')
+grid()
+
+
+```
+
+*Figure 7: Linear Model*
+
+  + A *trend* is observed in the standardised residual plot. This suggests that the residuals are not a true stochastic component and the linear trend model shall not be used.
+  
+*Figure 8: Quadratic Model*
+
+  + Comparing to the linear trend model, there is no trend in the plot. However, there are departures from the randomness and a pattern is observed.
+
+\pagebreak
+
+### Plotting Residuals Vs Fitted values
+
+```{r}
+par(mfrow = c(1,2))
+
+plot(y=rstudent(model1),x=as.vector(fitted(model1)),
+     xlab='Fitted Trend Values', ylab='Standardized Residuals',
+     type='p', main = "Figure 9: Linear Model",
+     pch = 20, col = 'darkgreen')
+abline(h=0, col = "gold", lty = 2, lwd = 2)
+grid(lwd = 1.5)
+
+plot(y=rstudent(model2),x=as.vector(fitted(model2)),
+     xlab='Fitted Trend Values', ylab='Standardized Residuals',
+     type='p', main = "Figure 10: Quadratic Model",
+     col = 'darkgreen', pch = 20)
+abline(h=0, col = 'gold', lty = 2, lwd = 2)
+grid(lwd = 1.5)
+```
+
+
+*Figure 9: Linear Model*
+
+  + The distribution is not random, there is a trend in distribution.
+  
+*Figure 10: Quadratic Model*
+
+  + Unlike white noise more residuals are observed with fitted values close to 0.
+
+\pagebreak
+
+### Normality of Residuals
+
++ Histograms can be used to visualise the distribution of the standardised residuals
++ Q-Q plot is used to present the normality assumption of the residuals
++ Hypothesis test, Shapiro-Wilk will be used to check the same.
+
+*Visualisation*
+
+```{r}
+par(mfrow=c(1, 2))
+y1 = rstudent(model1) #Linear Model Standardised Residuals
+y2 = rstudent(model2) #Quadratic Model Standardised Residuals
+hist(y1, main = "Figure 11: Linear Model \n Residual Histogram", col = 'lightblue')
+
+qqnorm(y1, main = 'Figure 12: Linear Model \n QQ Plot', col = 'blue', pch = 20)
+qqline(y1, col = 2, lwd = 1, lty = 2)
+
+```
+
+- As per fig. 11, a symmetric ditribution around 0 is expected in the histogram for normal distribution, but, the same cannot be seen here. 
+- It can be seen from the fig. 12 that there are departures from the reference line. Therefore, it seems that the residuals are not distributed normally.
+
+```{r}
+par(mfrow=c(1, 2))
+hist(y2, main = "Figure 13: Quadratic Model \n Residual Histogram", col = 'lightblue')
+
+qqnorm(y2, main = 'Figure 14: Quadratic Model \n QQ Plot', col = 'blue', pch = 20)
+qqline(y2, col = 2, lwd = 1, lty = 2)
+```
+
+- As per fig. 13, Same as the residuals of the linear trend model, normal distribution cannot be observed in Histogram. 
+- As per fig. 14, there are departures from the normality reference line.
+
+*Hypothesis Testing*
+
+Hypothesis testing is used to check the normality of the series.
+
+```{r}
+shapiro.test(rstudent(model1)) # Linear Model Hypothesis Testing
+```
+
+As the *p-value* is greater than the significance level of 0.05, we *cannot reject* the null hypothesis that the residuals are from the population which is normally distributed.
+
+```{r}
+shapiro.test(rstudent(model2)) # Quadratic Model Hypothesis Testing
+```
+
+As the *p*-value is greater than 0.05, we cannot reject the hypthesis that the residuals are from the population which has a normal distribution.
+
+\pagebreak
+
+### Auto - Correlation Function
+
+```{r}
+par(mfrow=c(1,2))
+
+acf(rstudent(model1), main = "Figure 15: ACF \n Linear Model Residuals")
+acf(rstudent(model2), main = "Figure 16: ACF \n Quadratic Model Residuals")
+
+```
+
+As per fig. 15 & fig. 16, that there are still correlation values higher than the confidence bound which is not expected in white noise.
+
+## Conclusion
+
+Through residual analysis, it is observed that there is still correlation in the residual values. Residuals are not normally distributed in both linear & quadratic trend model. As, the trend in the time-series was not accounted for before modeling, stochastic component is not truely a white noise.
+
+Therefore, from here we will depart from the regression approach and will explore *time-series models* below.
+
+\pagebreak
+
+# ARIMA MODELING
+
+To begin with ARIMA models, we first have to deal with trend and non-stationarity in the series.
+
+## Trend in the Series
+
+```{r}
+
+par(mfrow = c(1,2))
+acf(eggs.ts, main = "Figure 17: ACF \n Eggs Depostions")
+pacf(eggs.ts, main = "Figure 18: PACF \n Egg Depositions")
+
+```
+
+As per fig. 17 & fig. 18, we can confirm the following:
+
+  + Highly signifcant lag in the ACF plot
+  + There is a wave pattern in the ACF plot, we can say that the series is auto-regressive
+  + Highly significant lag in PACF plot suggests AR(1)
+
+But the series also has an upward trend, so we will remove non-stationarity from the series and then explore the possisbility of AR(1) model.
+
+### De-Trending the Series
+
+Following from the observation in `section 3.4`, we will try to achieve normality in the series.
+
+```{r}
+
+qqnorm(t.eggs, col='blue', pch=20, main="Figure 19: Normal Q-Q Plot \n Log-Transformed Series")
+qqline(t.eggs, col=2, lwd=1.8)
+grid()
+```
+
+As per fig. 19, the log transformation used in trend modeling does not help in achieving normal distribution in the series.
+
+We will use $Box-Cox Transformation Search$ to achieve normal distribution.
+
+```{r echo=FALSE}
+
+BoxCoxSearch = function(y, lambda=seq(-3,3,0.01), 
+                        m= c("sf", "sw","ad" ,"cvm", "pt", "lt", "jb"), plotit = F, verbose = T){
+  N = length(m)
+  BC.y = array(NA,N)
+  BC.lam = array(NA,N)
+  for (i in 1:N){
+    if (m[i] == "sf"){
+      wrt = "Shapiro-Francia Test"
+    } else if (m[i] == "sw"){
+      wrt = "Shapiro-Wilk  Test"
+    } else if (m[i] == "ad"){
+      wrt = "Anderson-Darling Test"
+    } else if (m[i] == "cvm"){
+      wrt = "Cramer-von Mises Test"
+    } else if (m[i] == "pt"){
+      wrt = "Pearson Chi-square Test"
+    } else if (m[i] == "lt"){
+      wrt = "Lilliefors Test"
+    } else if (m[i] == "jb"){
+      wrt = "Jarque-Bera Test"
+    } 
+    
+    print(paste0("------------- ",wrt," -------------"))
+    out = tryCatch({boxcoxnc(y, method = m[i], lam = lambda, lambda2 = NULL, plot = plotit, alpha = 0.05, verbose = verbose)
+                   BC.lam[i] = as.numeric(out$lambda.hat)}, 
+                   error = function(e) print("No results for this test!"))
+    
+  }
+  return(list(lambda = BC.lam,p.value = BC.y))
+}
+
+```
+```{r}
+
+transformation = BoxCoxSearch((eggs.ts))
+
+```
+
+*Series Transformation*
+
+From above search for transformation, we found $lambda = 0.66$ and this will be used to transform the dataset.
+
+```{r}
+lambda = 0.66
+BC.eggs = ((eggs.ts^lambda)-1)/lambda
+```
+
+*Visualisation of Transformed Data*
+
+```{r}
+qqnorm(BC.eggs, col='blue', pch=20, main = "Figure 20: Normal Q-Q Plot \n Box-Cox Transformed Series")
+qqline(BC.eggs, col = 2, lwd = 1, lty = 2)
+
+```
+
+As per fig. 20, The normality of distribution is considerably improved by Box-Cox Transformation.
+
+\pagebreak
+
+## Stationarity
+
+To see if the series is still non-stationary after the transformation, we will apply $Augmentd Dickey-Fuller Test$.
+
+```{r}
+ar(diff(BC.eggs))
+```
+
+Order obtained from the test is 0.
+
+```{r}
+adfTest(BC.eggs, lags = 0, title = NULL, description = NULL, type="ct")
+```
+
+We conclude that the series is still non-stationary at 5% significance level.
+
+We will apply $first-difference$ and test again.
+
+```{r}
+eggs.diff = diff(BC.eggs)
+ar(diff(eggs.diff))
+```
+
+Order of the Test obtained is 4.
+
+Also, we will check the *ACF and PACF* plot to check the significant lags.
+
+```{r}
+
+adfTest(eggs.diff, lags = 4, title = NULL, description = NULL, type="c")
+
+```
+
+We can see above that $Augmented Dickey-Fuller Test$ says, the series is non-stationary. We will also observe the ACF and PACF plots after differencing.
+
+```{r}
+par(mfrow = c(1,2))
+acf(eggs.diff, main="Figure 21: ACF \n First-Difference Series")
+pacf(eggs.diff, main = "Figure 22: PACF \n First-Difference Series")
+```
+
+As per fig. 21 & fig. 22, we can see that there are no significant lags.
+
+We will proceed with the $second-difference$ and test again.
+
+```{r}
+eggs.diff2 = diff(eggs.diff)
+ar(diff(eggs.diff2))
+```
+
+```{r}
+adfTest(eggs.diff2, lags = 4, title = NULL,description = NULL, type="c")
+```
+
+As per the unit root test, the series is still non stationary, we will also check ACF and PACF to decide if we will proceed with third-difference.
+
+```{r}
+
+par(mfrow = c(1,2))
+
+acf(eggs.diff2, main = "Figure 23: ACF \n Second-Difference Series")
+pacf(eggs.diff2, main = "Figure 24: PACF \n Second-Difference Series")
+
+```
+
+As per fig. 23, there are no significant lags in the series. But in fig. 24, we can see that there is one signigicant lag.
+
+For now, we will proceed with the $third-difference$.
+
+```{r}
+eggs.diff3 = diff(eggs.ts, differences=3)
+ar(diff(eggs.diff3))
+```
+
+```{r}
+adfTest(eggs.diff3, lags = 4, title = NULL, description = NULL)
+```
+
+As per the $ADF-Test$, the series is still non-stationary at 5% significance level.
+
+But we will look at the ACF and PACF plots also.
+
+```{r}
+par(mfrow=c(1,2))
+acf(eggs.diff3, main="Figure 25: ACF \n Third-Difference Series")
+pacf(eggs.diff3, main="Figure 26: PACF \n Third-Difference Series")
+```
+
+As per fig. 25 & fig. 26, we can see significant lags. This introduces unneccessary correlations in the series and is a sign of *overdifferencing*.
+
+Thereofore, although unit root test suggests the series to be non-stationary, we will not perform *fourth-difference*.
+
+we will obtain candidate models from both second & third difference as taking MA or AR terms may compensate underdifferencing or overdifferencing. [Robert Nau - Duke University](https://people.duke.edu/~rnau/411arim2.htm)
+
+\pagebreak
+
+# MODEL SELECTION
+
+## ACF and PACF
+
+```{r}
+par(mfrow=c(1,2))
+acf(eggs.diff2, ci.type='ma', main=" Figure 27: ACF \n second difference")
+pacf(eggs.diff2, main="Figure 28: PACF \n second difference")
+```
+
+As per fig. 27 & 28, we see alternate decaying pattern in ACF and 1 significant lag in PACF.
+
+So, a possible model from here is *{ARIMA(1,2,0)}*.
+
+```{r}
+par(mfrow=c(1,2))
+acf(eggs.diff3, ci.type='ma', main="Figure 29: ACF \n Third difference")
+pacf(eggs.diff3, main="Figure 30: PACF \n Third difference")
+```
+
+As per fig. 29 & 30, we see alternate descaying pattern in ACF and 2 signigicant lags in PACF.
+
+So, a possible model from here is *{ARIMA(1,3,0), ARIMA(2,3,0)}*.
+
+\pagebreak
+
+## Extended Auto-Correlation Function (EACF)
+
+```{r}
+eacf(eggs.diff2, ar.max = 3, ma.max = 2)
+```
+
+From the above EACF, the top-left 'o' symbol is located at AR=0 and MA=0.
+
+Possible candidate models from here are: *{ARIMA(1,2,0), ARIMA(0,2,1)}*
+
+```{r}
+eacf(eggs.diff3, ar.max = 3, ma.max = 2)
+```
+
+From the above EACF, the top-left 'o' symbol is located at AR=0 and MA=1.
+
+Possible candidate models from here are: *{ARIMA(0,3,1), ARIMA(1,3,1), ARIMA(1,3,0)}*
+
+\pagebreak
+
+## BIC Table
+
+```{r warning=FALSE}
+res1 = armasubsets(y=eggs.diff2,nar=2,nma=2,y.name='test',ar.method='ols')
+plot(res1)
+title("Figure 31: BIC Table for Second-Difference Series", line = 6)
+```
+
+As per fig. 31, we read the models *{ARIMA(0,2,2), ARIMA(1,2,2)}*.
+
+
+```{r warning=FALSE}
+res2 = armasubsets(y=eggs.diff3,nar=2,nma=2,y.name='test',ar.method='ols')
+plot(res2)
+title("Figure 32: BIC Table for Third-Difference Series", line = 6)
+```
+
+As per fig. 32, we read the models *{ARIMA(1,3,0), ARIMA(2,3,0)}*.
+
+## Possible Candidate Models
+
+From `Section 6.1 to 6.3`, we get the following set of possible candidate models:
+
+  + ARIMA(0,2,1)
+  + ARIMA(0,2,2)
+  + ARIMA(1,2,0)
+  + ARIMA(1,2,2)
+  + ARIMA(0,3,1)
+  + ARIMA(1,3,0)
+  + ARIMA(2,3,0)
+
+Now, we will proceed with the model fitting and find their parameter estimates.
+
+\pagebreak
+
+# MODEL FITTING
+
+## ARIMA(0,2,1)
+
+```{r}
+model.021 = arima(BC.eggs,order=c(0,2,1),method='ML')
+coeftest(model.021)
+```
+
+The $MA$ coefficient of $ARIMA(0,2,1)$ is *significant* at 5% significance level.
+
+## ARIMA(0,2,2)
+
+```{r}
+model.022 = arima(BC.eggs,order=c(0,2,2),method='ML')
+coeftest(model.022)
+```
+
+MA2 coefficient of $ARIMA(0,2,2)$ is not *significant* at 5% significance level.
+
+## ARIMA(1,2,0)
+
+```{r}
+model.120 = arima(BC.eggs,order=c(1,2,0),method='ML')
+coeftest(model.120)
+```
+
+The $AR$ coefficient of $ARIMA(1,2,0)$ is *significant* at 5% significance level.
+
+## ARIMA(1,2,2)
+
+```{r}
+model.122 = arima(BC.eggs,order=c(1,2,2),method='ML')
+coeftest(model.122)
+```
+
+All coefficients of $ARIMA(1,2,2)$ are not *significant* at 5% significance level.
+
+## ARIMA(0,3,1)
+
+```{r}
+model.031 = arima(BC.eggs,order=c(0,3,1),method='ML')
+coeftest(model.031)
+```
+
+MA1 coefficient of $ARIMA(0,3,1)$ is *significant* at 5% significance level.
+
+## ARIMA(1,3,0)
+
+```{r}
+model.130 = arima(BC.eggs,order=c(1,3,0),method='ML')
+coeftest(model.130)
+```
+
+AR1 coefficient of $ARIMA(1,3,0)$ is *significant* at 5% significance level.
+
+## ARIMA(1,3,1)
+
+```{r}
+model.131 = arima(BC.eggs,order=c(1,3,1),method='ML')
+coeftest(model.131)
+```
+
+AR1 coefficient of $ARIMA(1,3,1)$ is not *significant* at 5% significance level.
+
+## ARIMA(2,3,0)
+
+```{r}
+model.230 = arima(BC.eggs,order=c(2,3,0),method='ML')
+coeftest(model.230)
+```
+
+AR2 coefficient of $ARIMA(2,3,0)$ is not *significant* at 5% significance level.
+
+\pagebreak
+
+# DIAGNOSTIC CHECKING
+
+To perform the given activity, we will analyse *Residuals* of each model.
+
+## Residual Analysis - ARIMA(0,2,1)
+
+### Time-Series Plot of Residuals
+
+```{r}
+plot(rstandard(model.021),ylab ='Standardized Residuals',type='o',main="Figure 33: Time-Series Plot of Residuals \n ARIMA(0,2,1)", col = "darkgreen", pch=20, lw=1.8)
+abline(h=0, col="gold", lty=2, lw=2)
+grid()
+```
+
+From fig. 33, we can say that there is trend and there is an obvious change in variance in the residuals
+
+### Normality Check of Residuals
+
+```{r}
+qqnorm(residuals(model.021), pch = 20, col="blue", main = "Figure 34: Normal Q-Q Plot")
+qqline(residuals(model.021), lty=2, col="red", lw=1.5)
+
+shapiro.test(residuals(model.021))
+
+```
+
+Although we can see departures from the normality line in fig. 34, but, Shapiro Test gives the residuals to be normally distributed at 5% signigicane level.
+
+### ACF and PACF of Residuals
+
+```{r}
+par(mfrow=c(1,2))
+
+acf(residuals(model.021), main = "Figure 35: ACF \n Residuals of ARIMA(0,2,1)")
+pacf(residuals(model.021), main = "Figure 36: PACF \n Residuals of ARIMA(0,2,1)")
+```
+
+From ACF and PACF of the residual, we can conclude that the residuals constitute a white noise series as there are no highly significant correlation.
+
+### Box-Ljung Test
+
+```{r}
+Box.test(residuals(model.021), lag = 12, type = "Ljung-Box", fitdf = 0)
+```
+
+As seen in ACF & PACF plots, Ljung-Box Test also supports the non-existence of correlation in residuals at 5% significance level.
+
+### Diagnostics Visualisation
+
+```{r}
+tsdiag(model.021,gof=12,omit.initial=F)
+title("Figure 37: Diagnostic Visualisation - ARIMA(0,2,1)")
+```
+
+From the above diagnostic visualisation, it can be clearly seen that $p-value$ of the Ljung-Box Test  statistic for the whole range are not significant. Therefore, there is no existence of correlation in residuals of ARIMA(0,2,1) model.
+
+\pagebreak
+
+## Residual Analysis - ARIMA(1,2,0)
+
+### Time-Series Plot of Residuals
+
+```{r}
+plot(rstandard(model.120),ylab ='Standardized Residuals',type='o',main="Figure 38: Time-Series Plot \n Residuals - ARIMA(1,2,0) model", col = "darkgreen", pch=20, lw=1.8)
+abline(h=0, col="gold", lty=2, lw=2)
+grid()
+```
+
+From above plot, we can say that there is no trend, but, there is an obvious change in variance in the residuals
+
+### Normality Check of Residuals
+
+```{r}
+qqnorm(residuals(model.120), pch = 20, col="blue", main="Figure 39: Normal Q-Q Plot")
+qqline(residuals(model.120), lty=2, col="red", lw=1.5)
+
+shapiro.test(residuals(model.120))
+
+```
+
+Although we can see departures from the normality line in fig. 39, but, Shapiro Test gives the residuals to be normally distributed at 5% signigicane level.
+
+### ACF and PACF of Residuals
+
+```{r}
+par(mfrow=c(1,2))
+
+acf(residuals(model.120), main = "Figure 40: ACF \n Residuals of ARIMA(1,2,0)")
+pacf(residuals(model.120), main = "Figure 41: PACF \n Residuals of ARIMA(1,2,0)")
+```
+
+From ACF and PACF of the residual, we can conclude that the residuals may constitute a white noise series as there are no highly significant correlation in ACF.
+
+We will explore this further using Ljung-Box Test and visualisation tool.
+
+### Box-Ljung Test of Residuals
+
+```{r}
+Box.test(residuals(model.120), lag = 12, type = "Ljung-Box", fitdf = 0)
+```
+
+Ljung-Box Test also supports the non-existence of correlation in residuals at 5% significance level.
+
+### Diagnostics Visualisation 
+
+```{r}
+tsdiag(model.120,gof=12,omit.initial=F)
+title("Figure 42: Diagnostic Visualisation - ARIMA(1,2,0)")
+```
+
+From the above diagnostic visualisation, it can be clearly seen that $p-value$ of the Ljung-Box Test  statistic for some lags are *significant*. Therefore, there is existence of correlation in residuals of ARIMA(1,2,0) model.
+
+\pagebreak
+
+## Residual Analysis - ARIMA(0,3,1)
+
+### Time-Series Plot of Residuals
+
+```{r}
+plot(rstandard(model.031),ylab ='Standardized Residuals',type='o',main="Figure 43: Time-Series Plot \n Residuals - ARIMA(0,3,1) model", col = "darkgreen", pch=20, lw=1.8)
+abline(h=0, col="gold", lty=2, lw=2)
+grid()
+```
+
+From fig. 43, we can say that there is no trend, but, there is an obvious change in variance in the residuals
+
+### Normality Check of Residuals
+
+```{r}
+qqnorm(residuals(model.031), pch = 20, col="blue", main="Figure 44: Normal Q-Q Plot")
+qqline(residuals(model.031), lty=2, col="red", lw=1.5)
+
+shapiro.test(residuals(model.031))
+
+```
+
+Although we can see departures from normality line in fig. 44, Shapiro-Wilk Test gives residuals to be normally distributed at 5% signigicane level.
+
+### ACF and PACF of Residuals
+
+```{r}
+par(mfrow=c(1,2))
+acf(residuals(model.031), main = "Figure 45: ACF \n Residuals of ARIMA(0,3,1)")
+pacf(residuals(model.031), main = "Figure 46: PACF \n Residuals of ARIMA(0,3,1)")
+```
+
+From fig. 46, we can conclude that the residuals does not constitute a white noise series as there are highly significant correlation.
+
+### Box-Ljung Test of Residuals
+
+```{r}
+Box.test(residuals(model.031), lag = 12, type = "Ljung-Box", fitdf = 0)
+```
+
+As seen in ACF plot, Ljung-Box Test shows the non-existence of correlation in residuals at 5% significance level.
+
+We will explore this further using a visualisation tool.
+
+### Diagnostics Visualisation
+
+```{r}
+tsdiag(model.031,gof=12,omit.initial=F)
+title("Figure 47: Diagnostic Visualisation - ARIMA(0,3,1)")
+```
+
+From fig. 47, it can be clearly seen that $p-value$ of the Ljung-Box Test statistic shows existence of correlation at most lags. 
+Therefore, there is existence of correlation in residuals of ARIMA(0,3,1) model.
+
+\pagebreak
+
+## Residual Analysis - ARIMA(1,3,0)
+
+### Time-Series Plot of Residuals
+
+```{r}
+plot(rstandard(model.130),ylab ='Standardized Residuals',type='o',main="Figure 48: Time-Series Plot \n Residuals - ARIMA(1,3,0) model", col = "darkgreen", pch=20, lw=1.8)
+abline(h=0, col="gold", lty=2, lw=2)
+grid()
+```
+
+From fig. 48, we can say that there is no trend, but, there is an obvious change in variance in the residuals
+
+### Normality Check of Residuals
+
+```{r}
+qqnorm(residuals(model.130), pch = 20, col="blue", main = "Figure 49: Normal Q-Q Plot")
+qqline(residuals(model.130), lty=2, col="red", lw=1.5)
+
+shapiro.test(residuals(model.130))
+
+```
+
+Although we can see departures from the normality line in Q-Q Plot, but, Shapiro Test gives the residuals to be normally distributed at 5% signigicane level.
+
+### ACF and PACF of Residuals
+
+```{r}
+par(mfrow=c(1,2))
+acf(residuals(model.130), main = "Figure 50: ACF \n Residuals of ARIMA(1,3,0)")
+pacf(residuals(model.130), main = "Figure 51: PACF \n Residuals of ARIMA(1,3,0)")
+```
+
+From fig. 50 & fig. 51, we can conclude that the residuals may constitute a white noise series as there are significant correlation.
+
+We will check this hypthesis using the Ljung-Box Test.
+
+### Box-Ljung Test of Residuals 
+
+```{r}
+Box.test(residuals(model.130), lag = 12, type = "Ljung-Box", fitdf = 0)
+```
+
+As seen in ACF & PACF plots, Ljung-Box Test also supports the non-existence of correlation in residuals at 5% significance level.
+
+### Diagnostics Visualisation
+
+```{r}
+tsdiag(model.130,gof=12,omit.initial=F)
+title("Figure 52: Diagnostic Tool - ARIMA(1,3,0)")
+```
+
+From the fig. 52, it can be clearly seen that $p-value$ of the Ljung-Box Test  statistic for the whole range supports non-existence of correlation. 
+Therefore, there is no existence of correlation in residuals of ARIMA(1,3,0) model.
+
+\pagebreak
+
+## Residual Analysis - ARIMA(2,3,0)
+
+### Time-Series Plot of Residuals
+
+```{r}
+plot(rstandard(model.230),ylab ='Standardized Residuals',type='o',main="Figure 53: Time-Series Plot \n Residuals - ARIMA(2,3,0) model", col = "darkgreen", pch=20, lw=1.8)
+abline(h=0, col="gold", lty=2, lw=2)
+grid()
+```
+
+From fig. 53, we can say that there is no trend, but, there is an obvious change in variance in the residuals
+
+### Normality Check of Residuals
+
+```{r}
+qqnorm(residuals(model.230), pch = 20, col="blue", main = "Figure 54: Normal Q-Q Plot")
+qqline(residuals(model.230), lty=2, col="red", lw=1.5)
+
+shapiro.test(residuals(model.230))
+
+```
+
+Although we can see departures from the normality line in fig. 54, the Shapiro-Wilk Test gives the residuals to be normally distributed at 5% signigicane level.
+
+### ACF and PACF of Residuals
+
+```{r}
+par(mfrow=c(1,2))
+
+acf(residuals(model.230), main = "Figure 55: ACF \n Residuals of ARIMA(2,3,0)")
+pacf(residuals(model.230), main = "Figure 56: ACF \n Residuals of ARIMA(2,3,0)")
+```
+
+From fig. 55 & fig. 56, we can conclude that the residuals may constitute a white noise series as there is a significant correlation.
+
+### Box-Ljung Test of Residuals
+
+```{r}
+Box.test(residuals(model.230), lag = 12, type = "Ljung-Box", fitdf = 0)
+```
+
+As seen in ACF & PACF plots, Ljung-Box Test also supports the non-existence of correlation in residuals at 5% significance level.
+
+### Diagnostics Visualisation
+
+```{r}
+tsdiag(model.230,gof=12,omit.initial=F)
+title("Figure 57: Diagnostic Visualisation")
+```
+
+From the fig. 57, it can be clearly seen that $p-value$ of the Ljung-Box Test  statistic at most lags support existence of correlation. 
+Therefore, there is existence of correlation in residuals of ARIMA(2,3,0) model.
+
+## Residual Analysis - Conclusion
+
+As seen from various diagnostic checks, following candidate models will be taken in `Model Selection`:
+  + ARIMA(0,2,1)
+  + ARIMA(1,3,0)
+
+\pagebreak
+
+# MODEL SELECTION
+
+We will use AIC and BIC values for model selection.
+
+## AIC
+
+```{r}
+AIC(model.021, model.130)
+```
+
+## BIC
+
+```{r}
+BIC(model.021, model.130)
+```
+
+According to AIC and BIC, the *best model* is *ARIMA(0,2,1)*.
+
+# FORECASTING - ARIMA(0,2,1)
+
+## Prediction
+
+```{r}
+eggs.predict.transform = predict(model.021, n.ahead = 5, newxreg = NULL, se.fit = TRUE)
+eggs.predict.transform
+```
+
+\pagebreak
+
+## Plot of Transformed Series
+
+```{r}
+bestfitmodel = arima(BC.eggs, order=c(0,2,1), xreg=data.frame(constant=seq(eggs.ts))) # Create matrix of the covariates
+n=length(eggs.ts)
+n.ahead=5 #Forecast 5 years ahead
+newxreg=data.frame(constant=(n+1):(n+n.ahead))
+dataTransform = 
+plot.Arima(bestfitmodel, n.ahead=n.ahead, newxreg=newxreg,ylab='Transformed Depositions(In Millions)',xlab='Year',n1=c(1981,1), col='red', pch=20, main = "Figure 58: Time-Series Plot \n Transformed Egg Depositions with Predicted Values")
+grid()
+```
+
+\pagebreak
+
+## Plot of Time-Series with Predications
+
+```{r}
+eggs.predict = data.frame(eggs.predict.transform)
+eggs.predict[] <- lapply(eggs.predict[], function(x) (0.66*(x)+1)^(1/0.66))
+
+eggs.predict.ts = ts(eggs.predict$pred, start=c(1997,1))
+
+plot((eggs.ts), type = "o", ylab = 'Depositions (In Millions)', xlab = 'Years', 
+     main = 'Figure 59: Egg Depostions of age-3 \n Lake Huron Bloaters from 1981 to 2001', 
+     col = 'darkgreen', pch = 20, lwd=2, xlim=c(1981,2002))
+lines(eggs.predict.ts, col = "red", type="o", lty=2)
+legend(1981, 2, legend=c("Predicted", "Given"),
+       col=c("red", "darkgreen"), lty=2:1, cex=0.8)
+grid()
+```
+
+\pagebreak
+
+# SUMMARY
+
+In the given report, we observed that when the sample size is small, power of Shapiro-Wilk Test reduces. Therefore, visualisataions were relied on to check normality distribution of the series.
+
+To model the egg depositions series, trend models were rejected based on diagnostic checking and its failure to capture auto-correlation in the series.
+
+Various ARIMA models are taken to find the possible candidate models. We used order of differencing as 2 & 3, as beyond 3, correlations were introduced as per ACF & PACF. This gave us the signs of over-differencing. To accomodate mild under-differencing or over-differencing, candidate models from both orders were taken.
+
+ARIMA(0,2,1) was found to be the best fit model. Also, as the sample size is very small, predicting depositions for next 5 years becomes unreliable with high Standard Error. The visualisation of series with predicted values in given in `Section 10.3`.
+
+# REFRENCE
+
+[Oztuna D, Elhan AH, Tuccar E. Investigation of four different normality tests in terms of type 1 error rate and power under different distributions. Turkish Journal of Medical Sciences. 2006;36(3):171-6.](http://journals.tubitak.gov.tr/medical/issues/sag-06-36-3/sag-36-3-7-0510-10.pdf)
+
+[Robert Nau - Duke University](https://people.duke.edu/~rnau/411arim2.htm)
